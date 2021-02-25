@@ -2,6 +2,8 @@ package fileDB
 
 import (
 	"errors"
+	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,7 +55,7 @@ type GetResponse struct {
 	data []byte
 	isAtEnd bool
 	fSize int64
-	err error
+	Err error
 }
 
 func HandleGet(ctx Context, req GetRequest) GetResponse {
@@ -65,14 +67,14 @@ func HandleGet(ctx Context, req GetRequest) GetResponse {
 	if err != nil {
 		return GetResponse{
 			req: req,
-			err: err,
+			Err: err,
 		}
 	}
 	// Check that the relative path is still inside the root Directory
 	if !strings.HasPrefix(absPath, ctx.GetDataDir()) {
 		return GetResponse{
 			req: req,
-			err: errors.New("not in root Directory"),
+			Err: errors.New("not in root Directory"),
 		}
 	}
 
@@ -81,7 +83,7 @@ func HandleGet(ctx Context, req GetRequest) GetResponse {
 	if err != nil {
 		return GetResponse{
 			req: req,
-			err: err,
+			Err: err,
 		}
 	}
 
@@ -90,7 +92,7 @@ func HandleGet(ctx Context, req GetRequest) GetResponse {
 	if err != nil {
 		return GetResponse{
 			req: req,
-			err: err,
+			Err: err,
 		}
 	}
 
@@ -108,7 +110,7 @@ func HandleGet(ctx Context, req GetRequest) GetResponse {
 	if err != nil {
 		return GetResponse{
 			req: req,
-			err: err,
+			Err: err,
 		}
 	}
 
@@ -118,4 +120,14 @@ func HandleGet(ctx Context, req GetRequest) GetResponse {
 		fSize: fSize,
 		data: b,
 	}
+}
+
+func HandleGetRequest(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Hello!")
+	// TODO: merge HandleGet and NewGetRequest into this
+	// TODO: make nearly everything private
+	// prev usage to Simulate a read request:
+	//req := fileDB.NewGetRequest(0, 10, "/yey/boy")
+	//resp := fileDB.HandleGet(ctx, req)
+	//panicOn(resp.Err)
 }

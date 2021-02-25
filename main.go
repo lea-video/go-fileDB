@@ -1,17 +1,25 @@
 package main
 
-import "github.com/lea-video/go-fileDB/fileDB"
+import (
+	"github.com/lea-video/go-fileDB/fileDB"
+)
 
 func main() {
 	// Parse cli args
 	ctx := fileDB.ParseArgs()
-	// Cleanup the tmp Folder after Start
-	err := fileDB.CleanRoot(ctx)
+
+	// Enforce existence of data / tmp dir
+	err := fileDB.CreateDirIfNotExists(ctx.GetDataDir())
+	panicOn(err)
+	err = fileDB.CreateDirIfNotExists(ctx.GetTmpDir())
 	panicOn(err)
 
-	// Simulate a read request
-	req := fileDB.NewGetRequest(0, 10, "/yey/boy")
-	fileDB.HandleGet(ctx, req)
+	// Cleanup the tmp Folder after Start
+	err = fileDB.CleanTMP(ctx)
+	panicOn(err)
+
+	err = fileDB.RegisterServer()
+	panicOn(err)
 }
 
 func panicOn(err error) {
