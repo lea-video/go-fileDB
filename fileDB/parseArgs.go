@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // define type implementing Context
 type processCtx struct {
 	rootDir string
-	maxAge int64
+	maxAge time.Duration
 }
 
 func (ctx *processCtx) GetDataDir() string {
@@ -21,7 +22,7 @@ func (ctx *processCtx) GetTmpDir() string {
 	return filepath.Join(ctx.rootDir, "./tmp/")
 }
 
-func (ctx *processCtx) GetMaxTmpAge() int64 {
+func (ctx *processCtx) GetMaxTmpAge() time.Duration {
 	return ctx.maxAge
 }
 
@@ -29,13 +30,13 @@ func (ctx *processCtx) GetMaxTmpAge() int64 {
 type Context interface {
 	GetDataDir() string
 	GetTmpDir() string
-	GetMaxTmpAge() int64
+	GetMaxTmpAge() time.Duration
 }
 
 // define factory
 func ParseArgs() Context {
-	rootDir := flag.String("root", "<none>", "the root file directory")
-	maxAge := flag.Int64("maxage", 24*60*60, "the max age of a file in tmp (in sec)")
+	rootDir := flag.String("root", "<none>", "ArgError: the root file directory")
+	maxAge := flag.Uint("maxage", 24*60*60, "ArgError: the max age of a file in tmp (in sec)")
 	flag.Parse()
 
 	if *rootDir == "<none>" {
@@ -45,7 +46,7 @@ func ParseArgs() Context {
 
 	ctx := processCtx{
 		rootDir: *rootDir,
-		maxAge: *maxAge,
+		maxAge: time.Duration(*maxAge) * time.Second,
 	}
 	return &ctx
 }
