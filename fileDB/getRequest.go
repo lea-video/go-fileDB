@@ -1,8 +1,6 @@
 package fileDB
 
 import (
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -11,175 +9,154 @@ import (
 	"strings"
 )
 
-// define type implementing getRequestData
-type getRequestData struct {
-	StartByte int64
-	EndByte   int64
-	Path      string
+// define request type
+type getRequest struct {
+	StartByte  int64
+	ByteLength int64
+	Path       string
 }
 
-func (rd *getRequestData) GetStartByte() int64 {
-	return rd.StartByte
+func (req *getRequest) calculateRequestLength(ctx Context, fileSize int64) int64 {
+	var size int64 = 0
+	if req.ByteLength < 0 {
+		size = req.StartByte - fileSize
+	} else {
+		size = req.StartByte - req.ByteLength
+	}
+
+	if ctx.HasMaxChunkSizeLimit() {
+		size = min(ctx.GetMaxChunkSize(), size)
+	}
+	return size
 }
 
-func (rd *getRequestData) GetEndByte() int64 {
-	return rd.EndByte
-}
-
-func (rd *getRequestData) HasEnd() bool {
-	return rd.EndByte != -1
-}
-
-func (rd *getRequestData) GetChunkLength() int64 {
-	return rd.EndByte - rd.StartByte
-}
-
-func (rd *getRequestData) GetPath() string {
-	return rd.Path
-}
-
-type GetRequest interface {
-	GetStartByte() int64
-	GetEndByte() int64
-	HasEnd() bool
-	GetChunkLength() int64
-	GetPath() string
-}
-
-// define factory
-func newGetRequest(startByte, endByte int64, path string) GetRequest {
+// define getRequest factory
+func newGetRequest(startByte, length int64, path string) *getRequest {
 	if startByte < 0 {
 		startByte = 0
 	}
-	return &getRequestData{
-		StartByte: startByte,
-		EndByte:   endByte,
-		Path:      path,
+	return &getRequest{
+		StartByte:  startByte,
+		ByteLength: length,
+		Path:       path,
 	}
 }
 
-// other stuff
-type GetResponse struct {
-	Req GetRequest
-	Data []byte
+// define response type
+type getResponse struct {
+	Req        *getRequest
+	Data       []byte
 	DataLength int64
-	IsAtEnd bool
-	FSize int64
-	Error string
+	IsAtEnd    bool
+	FSize      int64
+	Error      string
+	StatusCode int
 }
 
-func handleGet(ctx Context, req GetRequest) GetResponse {
-	// Merge request path with root directory
-	p := filepath.Join(ctx.GetDataDir(), "." + req.GetPath())
+func (resp *getResponse) GetStatusCode() int {
+	return resp.StatusCode
+}
+func (resp *getResponse) GetError() string {
+	return resp.Error
+}
+func (resp *getResponse) DidFail() bool {
+	return resp.Error == ""
+}
+
+// define getResponse factorys
+func newFailedGetResponse(req *getRequest, err string, statusCode int) *getResponse {
+	return &getResponse{
+		Req:        req,
+		Error:      err,
+		StatusCode: statusCode,
+	}
+}
+func newSuccessfullGetResponse(req *getRequest, data []byte, datasize, filesize int64, isAtEnd bool) *getResponse {
+	return &getResponse{
+		Req:        req,
+		Data:       data,
+		DataLength: datasize,
+		IsAtEnd:    isAtEnd,
+		FSize:      filesize,
+		StatusCode: http.StatusOK,
+	}
+}
+
+// general functions
+
+func handleGetRequest(ctx Context, req *getRequest) *getResponse {
+	// Merge request Path with root directory
+	p := filepath.Join(ctx.GetDataDir(), "."+req.Path)
 
 	// Resolve to absolute Path
 	absPath, err := filepath.Abs(p)
 	if err != nil {
-		return GetResponse{
-			Req: req,
-			Error: "invalid path",
-		}
+		return newFailedGetResponse(req, "invalid Path", http.StatusNotFound)
 	}
-	// Check that the relative path is still inside the root Directory
+	// Check that the relative Path is still inside the root Directory
 	if !strings.HasPrefix(absPath, ctx.GetDataDir()) {
-		return GetResponse{
-			Req: req,
-			Error: "leaving the directory is not allowed",
-		}
+		return newFailedGetResponse(req, "leaving the directory is not allowed", http.StatusForbidden)
 	}
 
 	// Open the File
 	f, err := os.Open(p)
 	if err != nil {
-		return GetResponse{
-			Req: req,
-			Error: "failed to open file",
-		}
+		return newFailedGetResponse(req, "failed to open file", http.StatusBadRequest)
 	}
 
 	// Get the file size
 	stat, err := f.Stat()
 	if err != nil {
-		return GetResponse{
-			Req: req,
-			Error: "failed to open file",
-		}
+		return newFailedGetResponse(req, "failed to open file", http.StatusBadRequest)
 	}
 	fSize := stat.Size()
 
 	// Range-Validation
-	// TODO: check if some of these can be default to other vars
-	if fSize <= req.GetStartByte() {
-		return GetResponse{
-			Req: req,
-			Error: "Range outside of file",
-		}
-	}
-	if req.HasEnd() && req.GetEndByte() < req.GetStartByte() {
-		return GetResponse{
-			Req: req,
-			Error: "End before Start",
-		}
+	if fSize <= req.StartByte {
+		return newFailedGetResponse(req, "start is outside of file", http.StatusBadRequest)
 	}
 
 	// calculate the bytes to fetch
-	// TODO: max value for toFetch
-	toFetch := fSize - req.GetStartByte()
-	isAtEnd := true
-	if req.HasEnd() {
-		// Calculate if req.chunkLength is longer then the file
-		toFetch = min(toFetch, req.GetChunkLength())
-		if fSize > req.GetStartByte() + toFetch {
-			isAtEnd = false
-		}
-	}
+	toFetch := req.calculateRequestLength(ctx, fSize)
+	isAtEnd := req.StartByte+toFetch == fSize
 
 	// Read file content
 	b := make([]byte, toFetch)
-	_, err = f.ReadAt(b, req.GetStartByte())
+	_, err = f.ReadAt(b, req.StartByte)
 	if err != nil {
-		return GetResponse{
-			Req: req,
-			Error: "failed to read file",
-		}
+		return newFailedGetResponse(req, "failed to read file", http.StatusInternalServerError)
 	}
 
-	return GetResponse{
-		Req:     req,
-		IsAtEnd: isAtEnd,
-		FSize:   fSize,
-		Data:    b,
-		DataLength: toFetch,
-	}
+	return newSuccessfullGetResponse(req, b, toFetch, fSize, isAtEnd)
 }
 
-func HandleGetRequest(ctx Context, w http.ResponseWriter, r *http.Request) {
-	start := getDefaultInt64(r.URL.Query(), "start", 0)
-	// TODO: support "length" instead of "end"
-	end := getDefaultInt64(r.URL.Query(), "end", -1)
-	req := newGetRequest(start, end, r.URL.Path)
-	resp := handleGet(ctx, req)
-
-	b, err := json.Marshal(resp)
-	// TODO: replace error handling
-	if err != nil {
-		fmt.Println(err)
-	} else {
-		_, err = fmt.Fprint(w, string(b))
-		if err != nil {
-			fmt.Println(err)
-		}
+func buildGetRequest(r *http.Request) *getRequest {
+	// read all params
+	start, _ := getDefaultInt64(r.URL.Query(), "start", 0)
+	end, didDefaultEnd := getDefaultInt64(r.URL.Query(), "end", -1)
+	length, didDefaultLength := getDefaultInt64(r.URL.Query(), "length", -1)
+	// overwrite length with end only when no valid length was found
+	if didDefaultLength && !didDefaultEnd {
+		length = start - end
 	}
+
+	return newGetRequest(start, length, r.URL.Path)
 }
 
-func getDefaultInt64(val url.Values, key string, def int64) int64 {
+func HandleGetRequest(ctx Context, _ http.ResponseWriter, r *http.Request) serverResponse {
+	req := buildGetRequest(r)
+	resp := handleGetRequest(ctx, req)
+	return resp
+}
+
+func getDefaultInt64(val url.Values, key string, def int64) (int64, bool) {
 	r := val.Get(key)
 	if r == "" {
-		return def;
+		return def, true
 	}
-	i, err := strconv.ParseInt(r, 10, 64);
+	i, err := strconv.ParseInt(r, 10, 64)
 	if err != nil {
-		return def;
+		return def, true
 	}
-	return i;
+	return i, false
 }
