@@ -18,7 +18,7 @@ func main() {
 	err = fileDB.CleanTMP(ctx)
 	panicOn(err)
 
-	err = fileDB.RegisterServer()
+	err = fileDB.RegisterServer(ctx)
 	panicOn(err)
 }
 

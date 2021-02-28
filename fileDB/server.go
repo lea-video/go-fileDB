@@ -1,15 +1,18 @@
 package fileDB
 
-import "net/http"
+import (
+	"net/http"
+)
 
-func RegisterServer() error {
-	http.HandleFunc("/", reqHandler)
-	return http.ListenAndServe(":8080", nil)
+func RegisterServer(ctx Context) error {
+	calReqHandler := func(w http.ResponseWriter, r *http.Request) { reqHandler(ctx, w, r) }
+	http.HandleFunc("/", calReqHandler)
+	return http.ListenAndServe(ctx.GetPortStr(), nil)
 }
 
-func reqHandler(w http.ResponseWriter, r *http.Request) {
+func reqHandler(ctx Context, w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
-		HandleGetRequest(w, r)
+		HandleGetRequest(ctx, w, r)
 	} else {
 		denie(w, r)
 	}
