@@ -2,8 +2,10 @@ package fileDB
 
 import (
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 )
 
@@ -55,4 +57,16 @@ func CreateDirIfNotExists(dir string) error {
 		return errors.New(dir + " already exists as non-directory")
 	}
 	return nil
+}
+
+func getDefaultQueryInt64(val url.Values, key string, def int64) (int64, bool) {
+	r := val.Get(key)
+	if r == "" {
+		return def, true
+	}
+	i, err := strconv.ParseInt(r, 10, 64)
+	if err != nil {
+		return def, true
+	}
+	return i, false
 }

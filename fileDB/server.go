@@ -30,13 +30,15 @@ func reqHandler(ctx Context, w http.ResponseWriter, r *http.Request) {
 	var resp serverResponse
 
 	// build reply
-	if r.Method == "GET" {
-		resp = HandleGetRequest(ctx, w, r)
+	if r.Method == http.MethodGet {
+		resp = onGetRequest(ctx, r)
+	} else if r.Method == http.MethodDelete {
+		resp = onDeleteRequest(ctx, r)
+	} else if r.Method == http.MethodPost {
+		resp = onPostRequest(ctx, r)
 	} else {
-		resp = &simpleFailed{
-			err:        "Method is not supported",
-			statusCode: http.StatusMethodNotAllowed,
-		}
+		resp = &simpleFailed{"Method is not supported", http.StatusMethodNotAllowed}
+
 	}
 
 	// send successful reply
@@ -45,17 +47,15 @@ func reqHandler(ctx Context, w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			// TODO: replace with logger
 			fmt.Println(err)
-			resp = &simpleFailed{
-				err:        "Uups, sth went wrong",
-				statusCode: http.StatusInternalServerError,
-			}
+			resp = &simpleFailed{"Uups, sth went wrong", http.StatusInternalServerError}
 		} else {
 			w.WriteHeader(resp.GetStatusCode())
 			// TODO: validate this
-			// ignore errors
+			// ignore errors here
 			// most likely connections problems
 			// handled by connecting client
-			_, _ = w.Write(bytes)
+			_, err = w.Write(bytes)
+			fmt.Println(err)
 		}
 	}
 	// send failed reply

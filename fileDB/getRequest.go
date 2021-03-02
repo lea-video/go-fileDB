@@ -2,10 +2,8 @@ package fileDB
 
 import (
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -132,9 +130,9 @@ func handleGetRequest(ctx Context, req *getRequest) *getResponse {
 
 func buildGetRequest(r *http.Request) *getRequest {
 	// read all params
-	start, _ := getDefaultInt64(r.URL.Query(), "start", 0)
-	end, didDefaultEnd := getDefaultInt64(r.URL.Query(), "end", -1)
-	length, didDefaultLength := getDefaultInt64(r.URL.Query(), "length", -1)
+	start, _ := getDefaultQueryInt64(r.URL.Query(), "start", 0)
+	end, didDefaultEnd := getDefaultQueryInt64(r.URL.Query(), "end", -1)
+	length, didDefaultLength := getDefaultQueryInt64(r.URL.Query(), "length", -1)
 	// overwrite length with end only when no valid length was found
 	if didDefaultLength && !didDefaultEnd {
 		length = start - end
@@ -143,20 +141,8 @@ func buildGetRequest(r *http.Request) *getRequest {
 	return newGetRequest(start, length, r.URL.Path)
 }
 
-func HandleGetRequest(ctx Context, _ http.ResponseWriter, r *http.Request) serverResponse {
+func onGetRequest(ctx Context, r *http.Request) serverResponse {
 	req := buildGetRequest(r)
 	resp := handleGetRequest(ctx, req)
 	return resp
-}
-
-func getDefaultInt64(val url.Values, key string, def int64) (int64, bool) {
-	r := val.Get(key)
-	if r == "" {
-		return def, true
-	}
-	i, err := strconv.ParseInt(r, 10, 64)
-	if err != nil {
-		return def, true
-	}
-	return i, false
 }
