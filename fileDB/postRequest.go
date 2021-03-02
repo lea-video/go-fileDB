@@ -1,6 +1,7 @@
 package fileDB
 
 import (
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -9,10 +10,10 @@ import (
 
 // define request type
 type postRequest struct {
+	ReqBody io.ReadCloser
 	Offset int64
 	FSize int64
 	ChunkSize int64
-	Data []byte
 	Path string
 }
 // define response type
@@ -54,7 +55,7 @@ func handlePostRequest(ctx Context, req *postRequest) *postResponse {
 	if req.FSize <= 0 {
 		return newFailedPostResponse(req, "FSize invalid", http.StatusBadRequest)
 	}
-	if req.ChunkSize <= 0 || int64(len(req.Data)) != req.ChunkSize || req.ChunkSize + req.Offset > req.FSize {
+	if req.ChunkSize <= 0 || req.ChunkSize + req.Offset > req.FSize {
 		return newFailedPostResponse(req, "ChunkSize invalid", http.StatusBadRequest)
 	}
 
@@ -91,7 +92,13 @@ func handlePostRequest(ctx Context, req *postRequest) *postResponse {
 	}
 
 	// do writing
-	_, err = f.WriteAt(req.Data, req.Offset)
+	// TODO: check if this works
+	_, err = f.Seek(req.Offset, 0)
+	if err != nil {
+		return newFailedPostResponse(req, "failed to write", http.StatusInternalServerError)
+	}
+	defer req.ReqBody.Close()
+	_, err = io.Copy(f, req.ReqBody)
 	if err != nil {
 		return newFailedPostResponse(req, "failed to write", http.StatusInternalServerError)
 	}
@@ -120,6 +127,7 @@ func buildPostRequest(r *http.Request) *postRequest {
 
 	return &postRequest{
 		Offset: offset,
+		ReqBody: r.Body,
 		FSize:  fsize,
 		ChunkSize: chunkSize,
 		Path:   r.URL.Path,
