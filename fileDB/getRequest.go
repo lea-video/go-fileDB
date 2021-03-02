@@ -98,6 +98,7 @@ func handleGetRequest(ctx Context, req *getRequest) *getResponse {
 
 	// Open the File
 	f, err := os.Open(p)
+	// TODO: f.Close()
 	if err != nil {
 		return newFailedGetResponse(req, "failed to open file", http.StatusBadRequest)
 	}

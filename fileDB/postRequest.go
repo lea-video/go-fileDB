@@ -73,6 +73,7 @@ func handlePostRequest(ctx Context, req *postRequest) *postResponse {
 
 	// Open the File / create if not exists
 	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// TODO: f.Close()
 	if err != nil {
 		return newFailedPostResponse(req, "failed to open file", http.StatusBadRequest)
 	}
@@ -101,7 +102,7 @@ func handlePostRequest(ctx Context, req *postRequest) *postResponse {
 	}
 
 	// done with file:
-	newP := filepath.Join(ctx.GetTmpDir(), "."+req.Path)
+	newP := filepath.Join(ctx.GetDataDir(), "."+req.Path)
 	err = os.Rename(p, newP)
 	if err != nil {
 		return newFailedPostResponse(req, "failed to move file", http.StatusInternalServerError)
